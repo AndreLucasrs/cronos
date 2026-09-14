@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cronos</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="layout">
+    <main class="main">
+      <header>
+        <h1>Cronos</h1>
+        <p class="tagline">Gestão de cronograma — vitrine do <a href="https://github.com/AndreLucasrs/aegis4j" target="_blank" rel="noopener">aegis4j</a></p>
+      </header>
+
+      <section class="new-project">
+        <form id="project-form">
+          <input type="text" id="project-name" placeholder="Nome do projeto" required>
+          <button type="submit">Criar projeto</button>
+        </form>
+      </section>
+
+      <section class="projects" id="projects"></section>
+    </main>
+
+    <aside class="chat">
+      <h2>Assistente</h2>
+      <p class="chat-hint">Pergunte sobre prazos, estimativas ("quanto tempo leva a tarefa X?") ou status.</p>
+      <div class="chat-log" id="chat-log"></div>
+      <form id="chat-form">
+        <textarea id="chat-input" placeholder="Escreva sua pergunta..." rows="3" required></textarea>
+        <button type="submit">Enviar</button>
+      </form>
+    </aside>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

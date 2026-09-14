@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: cronos
+      POSTGRES_USER: cronos
+      POSTGRES_PASSWORD: cronos
+    ports:
+      - "5433:5432"
+    volumes:
+      - cronos-db:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  cronos-db:
