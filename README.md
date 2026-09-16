@@ -54,25 +54,33 @@ v0.2 o `ModelRouter` decide provider/model em toda mensagem (ver `routing.yaml`)
 |---|---|---|
 | **Guardrails** | ✅ | `MaxLengthGuard` bloqueia prompt gigante; `RegexPiiGuard` redige e-mail/telefone/cartão antes do modelo — `CronosAssistant` |
 | **Skills (progressive disclosure)** | ✅ | `skills/estimativa-esforco.md` (heurística sem histórico) + `skills/tarefas-similares.md` (usa o RAG) |
-| **RAG (pgvector)** | ✅ | `OllamaEmbedder` (chama `/api/embed` do Ollama — nenhum módulo do aegis4j ainda publica um `Embedder` concreto) + `PgVectorRetriever` sobre `task_embeddings`, indexada automaticamente quando uma tarefa vira `done` (`TaskIndexer`) |
+| **RAG (pgvector)** | ✅ | `OllamaEmbedder` (chama `/api/embed` do Ollama — nenhum módulo do aegis4j ainda publica um `Embedder` concreto) + `PgVectorRetriever` sobre `task_embeddings`, indexada automaticamente quando uma tarefa vira `done` (`TaskIndexer`). Só é consultado quando a pergunta bate com a mesma keyword que ativa a skill `tarefas-similares` (`ConditionalRetriever`) — ver limitações |
 | **Model routing** | ✅ | `routing.yaml` + `ModelRouter` — pergunta simples cai no `llama3.2:3b`, "estimativa"/"prazo"/"replanejar" cai no `deepseek-r1:14b`. Resposta do chat inclui `model` usado, pra ficar visível qual rota foi tomada. Rotear pra Anthropic/OpenAI de verdade é só trocar `provider`/`model` no YAML e ter a chave configurada |
 | **MCP client** | ✅ | Botão "Criar lembrete" por tarefa → `McpClient` (stdio) chama a tool `criar_lembrete` do servidor companheiro `mcp-calendar/` → gera um `.ics` real, baixável. **Ação determinística (botão), não o modelo decidindo** — o `Aegis4jEngine` v0.2 ainda não tem um loop de tool-calling; e é `.ics` em vez de Google Calendar real pra não depender de credencial OAuth |
 | **Provider embutido (biblioteca, não sidecar)** | ✅ | `Aegis4jEngine` embutido direto no processo do Javalin |
 
 ### Limitações honestas, não escondidas
 
-- O `Retriever` do aegis4j v0.2 é **incondicional** — consulta
-  `task_embeddings` em toda mensagem, não só nas relacionadas a tarefas
-  passadas. Sem efeito prático aqui (a skill ignora o contexto quando
-  irrelevante), mas é o mesmo gap documentado no Janus.
-- Modelos locais pequenos **nem sempre seguem 100% as instruções da skill**
-  (ex: o `llama3.2:3b` já respondeu em português citando o mecanismo interno
-  de "Context" apesar da skill proibir isso explicitamente; o
-  `deepseek-r1:14b` já respondeu em inglês a uma pergunta em português). É
-  característica real do modelo local, não bug de integração — um modelo
-  maior/mais bem instruído segue melhor.
-- Editar uma tarefa depois de concluída não reindexa o embedding
-  automaticamente (só reindexa se ela for marcada `done` de novo).
+- O `Retriever` do `Aegis4jEngine` v0.2 em si é **incondicional** — não tem
+  nenhuma abstração de "só busca se for relevante" (`RetrievalTriggerStrategy`
+  não existe ainda). O Cronos contorna isso na aplicação: `ConditionalRetriever`
+  só chama o `PgVectorRetriever` de verdade quando a pergunta bate com a
+  mesma keyword que ativaria a skill `tarefas-similares` — mesma fonte de
+  verdade das duas coisas, sem lista duplicada. O gap de engine continua
+  existindo (é uma limitação do próprio aegis4j), só não afeta mais o
+  Cronos na prática.
+- Modelos locais pequenos **nem sempre seguem as instruções da skill à
+  risca** — o `llama3.2:3b` já respondeu citando o mecanismo interno de
+  "Context" e contradizendo o próprio Context que tinha acabado de listar.
+  Mitigado (não eliminado) com um exemplo explícito de resposta errada vs.
+  certa na skill (`tarefas-similares.md`) — ajuda modelo pequeno seguir
+  regra melhor, mas não substitui um modelo maior/mais bem instruído.
+
+### Não é uma limitação (mas parecia)
+
+Editar uma tarefa depois de concluída deixaria o embedding indexado
+desatualizado — mas o Cronos **não tem endpoint de edição de tarefa**
+(só criar e mudar status), então esse cenário não existe hoje.
 
 ### Bug encontrado e corrigido no próprio aegis4j
 

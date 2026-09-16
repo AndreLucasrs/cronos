@@ -22,6 +22,7 @@ import dev.aegis4j.rag.pgvector.PgVectorRetrieverConfig;
 import dev.aegis4j.routing.yaml.YamlRoutingRuleLoader;
 import dev.aegis4j.skills.markdown.MarkdownSkillLoader;
 import dev.cronos.config.Env;
+import dev.cronos.rag.ConditionalRetriever;
 import dev.cronos.rag.OllamaEmbedder;
 import dev.cronos.rag.TaskIndexer;
 
@@ -51,14 +52,18 @@ public final class CronosAssistant {
         Embedder embedder = OllamaEmbedder.fromEnv();
         this.taskIndexer = new TaskIndexer(dataSource, embedder);
 
-        Retriever retriever = new PgVectorRetriever(
+        SkillRegistry skillRegistry = SkillRegistry.inMemory();
+        loadSkills(skillRegistry);
+
+        Retriever pgVectorRetriever = new PgVectorRetriever(
                 dataSource, embedder, PgVectorRetrieverConfig.defaults("task_embeddings"));
+        // Gate RAG on the exact same keyword match that activates the
+        // "tarefas-similares" skill — one source of truth, and no wasted
+        // embedding calls (nor irrelevant context) on unrelated questions.
+        Retriever retriever = new ConditionalRetriever(pgVectorRetriever, skillRegistry, "tarefas-similares");
 
         ProviderRegistry providerRegistry = new ProviderRegistry();
         providerRegistry.discover(Thread.currentThread().getContextClassLoader());
-
-        SkillRegistry skillRegistry = SkillRegistry.inMemory();
-        loadSkills(skillRegistry);
 
         ModelRouter modelRouter = loadModelRouter();
 
