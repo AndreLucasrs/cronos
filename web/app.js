@@ -64,13 +64,34 @@
           ["todo", "doing", "done"].map(function (s) {
             return "<option value=\"" + s + "\"" + (s === task.status ? " selected" : "") + ">" + s + "</option>";
           }).join("") +
-          "</select>";
+          "</select>" +
+          (task.dueDate ? "<button type=\"button\" class=\"reminder-btn\">Criar lembrete</button>" : "") +
+          "<span class=\"reminder-link\"></span>";
         li.querySelector("select").addEventListener("change", function (ev) {
           api("/api/tasks/" + task.id + "/status", {
             method: "PATCH",
             body: JSON.stringify({ status: ev.target.value })
+          }).then(function () {
+            if (ev.target.value === "done") loadTasks(projectId);
           });
         });
+        var reminderBtn = li.querySelector(".reminder-btn");
+        if (reminderBtn) {
+          reminderBtn.addEventListener("click", function () {
+            reminderBtn.disabled = true;
+            reminderBtn.textContent = "Gerando...";
+            api("/api/tasks/" + task.id + "/reminder", { method: "POST", body: "{}" })
+              .then(function (res) {
+                var link = li.querySelector(".reminder-link");
+                link.innerHTML = " <a href=\"" + res.downloadUrl + "\" download>Baixar .ics</a>";
+                reminderBtn.remove();
+              })
+              .catch(function () {
+                reminderBtn.disabled = false;
+                reminderBtn.textContent = "Criar lembrete";
+              });
+          });
+        }
         list.appendChild(li);
       });
     });
@@ -105,15 +126,21 @@
     appendChat("user", message);
     input.value = "";
     api("/api/assistant/chat", { method: "POST", body: JSON.stringify({ message: message }) })
-      .then(function (res) { appendChat("assistant", res.reply); })
+      .then(function (res) { appendChat("assistant", res.reply, res.model); })
       .catch(function (err) { appendChat("error", err.error === "blocked" ? "Bloqueado pelo guard: " + err.reasonCode : "Erro: " + (err.error || "desconhecido")); });
   });
 
-  function appendChat(role, text) {
+  function appendChat(role, text, model) {
     var div = document.createElement("div");
     div.className = "chat-msg " + role;
     div.textContent = text;
     chatLog.appendChild(div);
+    if (model) {
+      var caption = document.createElement("div");
+      caption.className = "chat-model";
+      caption.textContent = "respondido por " + model + " (routing)";
+      chatLog.appendChild(caption);
+    }
     chatLog.scrollTop = chatLog.scrollHeight;
   }
 

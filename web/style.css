@@ -125,6 +125,25 @@ button:hover { opacity: 0.9; }
 }
 .due { font-size: 12px; color: var(--muted); }
 
+.reminder-btn {
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.reminder-btn:disabled { opacity: 0.6; cursor: default; }
+.reminder-link { font-size: 12px; }
+.reminder-link a { color: var(--accent); }
+
+.chat-model {
+  font-size: 11px;
+  color: var(--muted);
+  margin: -4px 0 4px;
+}
+
 .chat-hint { color: var(--muted); font-size: 13px; }
 .chat-log {
   flex: 1;

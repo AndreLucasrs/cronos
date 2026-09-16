@@ -1,0 +1,8 @@
+rules:
+  - match:
+      keyword: [quanto tempo, estimativa, estimar, prazo, quantos dias, replanejar, replanejamento]
+    provider: ollama
+    model: deepseek-r1:14b
+default:
+  provider: ollama
+  model: llama3.2:3b
