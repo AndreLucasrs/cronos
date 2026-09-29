@@ -90,7 +90,7 @@ Ollama manda um campo `thinking` (chain-of-thought) que o `OllamaMessage` do
 aegis4j não esperava. Corrigido e testado no próprio aegis4j
 ([`v0.2.1`](https://github.com/AndreLucasrs/aegis4j/releases/tag/v0.2.1),
 com teste de regressão) — o Cronos consome essa correção desde então (hoje
-na [`v0.2.2`](https://github.com/AndreLucasrs/aegis4j/releases/tag/v0.2.2)).
+na [`v0.3.0`](https://github.com/AndreLucasrs/aegis4j/releases/tag/v0.3.0)).
 
 ## Arquitetura
 
@@ -122,13 +122,14 @@ repositories {
     maven { url = uri("https://jitpack.io") }
 }
 dependencies {
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-core:v0.2.2")
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-guardrails-builtin:v0.2.2")
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-skills:v0.2.2")
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-provider-ollama:v0.2.2")
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-rag-jdbc-pgvector:v0.2.2")
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-routing:v0.2.2")
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-mcp:v0.2.2")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-core:v0.3.0")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-guardrails-builtin:v0.3.0")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-skills:v0.3.0")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-provider-ollama:v0.3.0")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-provider-openai:v0.3.0")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-rag-jdbc-pgvector:v0.3.0")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-routing:v0.3.0")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-mcp:v0.3.0")
 }
 ```
 
