@@ -1,7 +1,11 @@
 package dev.cronos.assistant;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.aegis4j.api.mcp.McpContentBlock;
 import dev.aegis4j.api.mcp.McpToolResult;
+import dev.aegis4j.api.provider.ToolCall;
+import dev.aegis4j.api.provider.ToolDefinition;
 import dev.aegis4j.api.rag.Embedder;
 import dev.aegis4j.api.rag.Retriever;
 import dev.aegis4j.api.routing.RouteTarget;
@@ -17,6 +21,7 @@ import dev.aegis4j.guardrails.builtin.RegexPiiGuard;
 import dev.aegis4j.mcp.McpClient;
 import dev.aegis4j.mcp.McpException;
 import dev.aegis4j.mcp.transport.StdioMcpTransport;
+import dev.aegis4j.provider.openai.OpenAiCompatibleProvider;
 import dev.aegis4j.rag.pgvector.PgVectorRetriever;
 import dev.aegis4j.rag.pgvector.PgVectorRetrieverConfig;
 import dev.aegis4j.routing.yaml.YamlRoutingRuleLoader;
@@ -27,26 +32,34 @@ import dev.cronos.rag.OllamaEmbedder;
 import dev.cronos.rag.TaskIndexer;
 
 import javax.sql.DataSource;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Wires the embedded {@link Aegis4jEngine} with all four aegis4j pillars
  * this showcase demonstrates: Guardrails, Skills, RAG (pgvector, over
  * completed tasks) and Model Routing (two local Ollama models). MCP is used
- * separately — {@link #createReminderIcs} calls a companion server directly,
- * as a deterministic action, not through the engine (aegis4j v0.2 has no
- * LLM-driven tool-calling loop yet).
+ * in two ways: {@link #createReminderIcs} calls the companion server
+ * directly for the deterministic button flow, and {@link #reminderTool}
+ * exposes the same "criar_lembrete" action as a real tool the model can
+ * decide to call, via the aegis4j v0.3 tool-calling loop (only
+ * {@code OpenAiCompatibleProvider} sends {@code tools} on the wire today,
+ * hence the extra "ollama-openai" provider registered below).
  */
 public final class CronosAssistant {
 
     private final Aegis4jEngine engine;
     private final TaskIndexer taskIndexer;
     private final McpClient calendarMcpClient;
+    private final ObjectMapper toolArgsMapper = new ObjectMapper();
 
     public CronosAssistant(DataSource dataSource) {
         Embedder embedder = OllamaEmbedder.fromEnv();
@@ -64,8 +77,15 @@ public final class CronosAssistant {
 
         ProviderRegistry providerRegistry = new ProviderRegistry();
         providerRegistry.discover(Thread.currentThread().getContextClassLoader());
+        // Only OpenAiCompatibleProvider sends `tools`/parses `tool_calls` on
+        // the wire as of v0.3 — OllamaProvider silently ignores them — so
+        // tool-calling turns are routed here instead (see routing.yaml).
+        providerRegistry.register(OpenAiCompatibleProvider.custom(
+                "ollama-openai", Env.get("CRONOS_OLLAMA_OPENAI_BASE_URL", "http://localhost:11434/v1"), ""));
 
         ModelRouter modelRouter = loadModelRouter();
+
+        this.calendarMcpClient = connectCalendarMcp();
 
         this.engine = Aegis4jEngine.builder()
                 .providerRegistry(providerRegistry)
@@ -75,9 +95,8 @@ public final class CronosAssistant {
                 .skillRegistry(skillRegistry)
                 .retriever(retriever)
                 .modelRouter(modelRouter)
+                .tools(List.of(reminderTool()), this::executeReminderTool)
                 .build();
-
-        this.calendarMcpClient = connectCalendarMcp();
     }
 
     private void loadSkills(SkillRegistry skillRegistry) {
@@ -100,6 +119,55 @@ public final class CronosAssistant {
         McpClient client = new McpClient(transport, "cronos", "0.1.0");
         client.initialize();
         return client;
+    }
+
+    /** Schema for the "criar_lembrete" tool — mirrors mcp-calendar's own inputSchema (title/dueDate required, description optional). */
+    private ToolDefinition reminderTool() {
+        return new ToolDefinition(
+                "criar_lembrete",
+                "Cria um lembrete de calendário (.ics) para uma tarefa com prazo definido.",
+                Map.of("type", "object",
+                        "properties", Map.of(
+                                "title", Map.of("type", "string", "description", "Título da tarefa / do evento"),
+                                "dueDate", Map.of("type", "string", "description", "Data no formato YYYY-MM-DD"),
+                                "description", Map.of("type", "string", "description", "Descrição opcional da tarefa")),
+                        "required", List.of("title", "dueDate")));
+    }
+
+    /**
+     * Runs the model-decided "criar_lembrete" tool call: parses the model's
+     * raw JSON arguments, calls the same MCP tool {@link #createReminderIcs}
+     * uses, and writes the resulting .ics under a fresh UUID (there's no
+     * task id here — the model, not a task row, triggered this).
+     */
+    private String executeReminderTool(ToolCall call) {
+        JsonNode args;
+        try {
+            args = toolArgsMapper.readTree(call.argumentsJson());
+        } catch (IOException e) {
+            throw new UncheckedIOException("Invalid criar_lembrete arguments from model", e);
+        }
+        String title = args.path("title").asText(null);
+        String dueDate = args.path("dueDate").asText(null);
+        String description = args.path("description").asText(null);
+        if (title == null || dueDate == null) {
+            return "Faltam campos obrigatórios (title, dueDate) para criar o lembrete.";
+        }
+
+        Optional<String> ics = createReminderIcs(title, LocalDate.parse(dueDate), description);
+        if (ics.isEmpty()) {
+            return "Falha ao gerar o lembrete via mcp-calendar.";
+        }
+
+        try {
+            Path remindersDir = Path.of(Env.get("CRONOS_REMINDERS_DIR", "reminders"));
+            Files.createDirectories(remindersDir);
+            String fileName = UUID.randomUUID() + ".ics";
+            Files.writeString(remindersDir.resolve(fileName), ics.get());
+            return "Lembrete criado: /reminders/" + fileName;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write reminder .ics to disk", e);
+        }
     }
 
     public ChatResult chat(String userInput) {
