@@ -90,6 +90,24 @@ guards de saída (`RegexPiiGuard`), tool-calling e tracking de usage **não
 rodam** nesse caminho — só no `chat()` não-streamado. A UI marca a mensagem
 em streaming visualmente pra deixar essa troca visível, não escondida.
 
+### Briefing de projeto via pipeline de ingestão de documentos (v0.3)
+
+`PUT /api/projects/{id}/brief` (`{"markdown": "..."}`) ingere um texto livre
+(o "briefing" do projeto — escopo, contexto, restrições) pelo pipeline de
+**documentos** do aegis4j (`aegis4j-rag-jdbc-pgvector`'s `ingest`), diferente
+do `TaskIndexer`, que indexa tarefas linha a linha sem passar por esse
+pipeline: `FixedSizeChunker(800, 100)` quebra o markdown em pedaços
+sobrepostos e `PgVectorIngester` embeda e grava cada um na nova tabela
+`project_brief_chunks` (mesmo shape de `task_embeddings`). Usar o id do
+próprio projeto como id do `Document` faz um novo `PUT` do mesmo projeto
+substituir os chunks antigos automaticamente (upsert + limpeza de órfãos, já
+embutidos no `PgVectorIngester`). Retorna `{"chunksIndexed": N}`. A skill
+`skills/buscar-no-briefing.md` (gatilhos: `briefing`, `escopo do projeto`,
+`o que diz o briefing`, `codinome`) ativa um `PgVectorRetriever` sobre essa
+tabela, adicionado à mesma `CompositeRetriever` que já servia
+`tarefas-similares` — cada fonte de RAG continua isolada por skill, sem uma
+sobrescrever a outra.
+
 ### Limitações honestas, não escondidas
 
 - O `Retriever` do `Aegis4jEngine` v0.2 em si é **incondicional** — não tem

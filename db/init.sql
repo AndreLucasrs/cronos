@@ -32,3 +32,13 @@ CREATE TABLE task_embeddings (
     content text NOT NULL,
     embedding vector(768)
 );
+
+-- RAG: chunks de "briefing" de projeto, ingeridos via o pipeline de
+-- documentos do aegis4j (DocumentLoader/Chunker/PgVectorIngester) —
+-- diferente de task_embeddings, que é indexado linha a linha por
+-- TaskIndexer sem passar por esse pipeline.
+CREATE TABLE project_brief_chunks (
+    id text PRIMARY KEY,
+    content text NOT NULL,
+    embedding vector(768)
+);

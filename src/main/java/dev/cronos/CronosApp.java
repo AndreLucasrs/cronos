@@ -37,7 +37,7 @@ public final class CronosApp {
         CronosAssistant assistant = new CronosAssistant(dataSource);
         Runtime.getRuntime().addShutdownHook(new Thread(assistant::close));
 
-        ProjectsHandler projectsHandler = new ProjectsHandler(projectRepository, mapper);
+        ProjectsHandler projectsHandler = new ProjectsHandler(projectRepository, assistant, mapper);
         TasksHandler tasksHandler = new TasksHandler(taskRepository, assistant, mapper);
         AssistantChatHandler chatHandler = new AssistantChatHandler(assistant, mapper);
         AssistantChatStreamHandler chatStreamHandler = new AssistantChatStreamHandler(assistant, mapper);
@@ -62,6 +62,7 @@ public final class CronosApp {
         app.get("/api/projects", projectsHandler.list());
         app.post("/api/projects", projectsHandler.create());
         app.get("/api/projects/{id}", projectsHandler.getOne());
+        app.put("/api/projects/{id}/brief", projectsHandler.setBrief());
         app.get("/api/projects/{id}/tasks", tasksHandler.listByProject());
         app.post("/api/tasks", tasksHandler.create());
         app.patch("/api/tasks/{id}/status", tasksHandler.updateStatus());
