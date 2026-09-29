@@ -15,9 +15,11 @@ import dev.aegis4j.core.routing.ModelRouter;
 import dev.aegis4j.core.skill.SkillRegistry;
 import dev.aegis4j.guardrails.builtin.MaxLengthGuard;
 import dev.aegis4j.guardrails.builtin.RegexPiiGuard;
+import dev.aegis4j.guardrails.builtin.grounding.HallucinationGuard;
 import dev.aegis4j.mcp.McpClient;
 import dev.aegis4j.mcp.McpException;
 import dev.aegis4j.mcp.transport.StdioMcpTransport;
+import dev.aegis4j.provider.ollama.OllamaProvider;
 import dev.aegis4j.rag.pgvector.PgVectorRetriever;
 import dev.aegis4j.rag.pgvector.PgVectorRetrieverConfig;
 import dev.aegis4j.routing.yaml.YamlRoutingRuleLoader;
@@ -72,7 +74,8 @@ public final class CronosAssistant {
                 .providerRegistry(providerRegistry)
                 .guardChain(GuardChain.of(
                         MaxLengthGuard.forInput(Env.getInt("CRONOS_MAX_INPUT_CHARS", 4000)),
-                        RegexPiiGuard.allPatterns()))
+                        RegexPiiGuard.allPatterns(),
+                        buildHallucinationGuard()))
                 .skillRegistry(skillRegistry)
                 .retriever(retriever)
                 .modelRouter(modelRouter)
@@ -84,6 +87,14 @@ public final class CronosAssistant {
     private void loadSkills(SkillRegistry skillRegistry) {
         Path skillsDir = Path.of(Env.get("CRONOS_SKILLS_DIR", "skills"));
         new MarkdownSkillLoader().loadDirectory(skillsDir).forEach(skillRegistry::register);
+    }
+
+    // Fail-open judge on a second Ollama call — WARN mode only, since a false
+    // positive from a free local judge model must never block an otherwise
+    // working demo answer. No-op (zero extra latency) on turns where RAG
+    // didn't retrieve anything, per HallucinationGuard's own contract.
+    private HallucinationGuard buildHallucinationGuard() {
+        return HallucinationGuard.warning(OllamaProvider.create(), "llama3.2:3b");
     }
 
     private ModelRouter loadModelRouter() {

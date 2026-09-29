@@ -59,6 +59,12 @@ v0.2 o `ModelRouter` decide provider/model em toda mensagem (ver `routing.yaml`)
 | **MCP client** | ✅ | Botão "Criar lembrete" por tarefa → `McpClient` (stdio) chama a tool `criar_lembrete` do servidor companheiro `mcp-calendar/` → gera um `.ics` real, baixável. **Ação determinística (botão), não o modelo decidindo** — o `Aegis4jEngine` v0.2 ainda não tem um loop de tool-calling; e é `.ics` em vez de Google Calendar real pra não depender de credencial OAuth |
 | **Provider embutido (biblioteca, não sidecar)** | ✅ | `Aegis4jEngine` embutido direto no processo do Javalin |
 
+Desde o bump pra v0.3, o `GuardChain` também tem um `HallucinationGuard` (modo
+`WARN`) no final — julga se a resposta está de fato apoiada no que o RAG
+recuperou, usando o `llama3.2:3b` como juiz numa segunda chamada. Só entra em
+ação quando `retrievedChunks` não está vazio (ou seja, só no caminho da
+`tarefas-similares`); nas demais mensagens é um no-op sem custo extra.
+
 ### Streaming (v0.3)
 
 `POST /api/assistant/chat/stream` usa `Aegis4jEngine.chatStream` (SSE,
