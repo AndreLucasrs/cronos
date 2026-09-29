@@ -28,6 +28,9 @@ import dev.aegis4j.provider.ollama.OllamaProvider;
 import dev.aegis4j.provider.openai.OpenAiCompatibleProvider;
 import dev.aegis4j.rag.pgvector.PgVectorRetriever;
 import dev.aegis4j.rag.pgvector.PgVectorRetrieverConfig;
+import dev.aegis4j.rag.pgvector.ingest.Document;
+import dev.aegis4j.rag.pgvector.ingest.FixedSizeChunker;
+import dev.aegis4j.rag.pgvector.ingest.PgVectorIngester;
 import dev.aegis4j.routing.yaml.YamlRoutingRuleLoader;
 import dev.aegis4j.skills.markdown.MarkdownSkillLoader;
 import dev.cronos.config.Env;
@@ -62,30 +65,40 @@ import java.util.UUID;
  */
 public final class CronosAssistant {
 
+    /** Table PgVectorIngester writes project briefing chunks to, and PgVectorRetriever reads them back from. */
+    private static final String PROJECT_BRIEF_TABLE = "project_brief_chunks";
+
     private final Aegis4jEngine engine;
     private final TaskIndexer taskIndexer;
     private final McpClient calendarMcpClient;
     private final ObjectMapper toolArgsMapper = new ObjectMapper();
     private final InMemoryUsageTracker usageTracker;
+    private final PgVectorIngester projectBriefIngester;
 
     public CronosAssistant(DataSource dataSource) {
         Embedder embedder = OllamaEmbedder.fromEnv();
         this.taskIndexer = new TaskIndexer(dataSource, embedder);
+        this.projectBriefIngester = new PgVectorIngester(
+                dataSource, embedder, PgVectorRetrieverConfig.defaults(PROJECT_BRIEF_TABLE),
+                new FixedSizeChunker(800, 100));
 
         SkillRegistry skillRegistry = SkillRegistry.inMemory();
         loadSkills(skillRegistry);
 
         Retriever pgVectorRetriever = new PgVectorRetriever(
                 dataSource, embedder, PgVectorRetrieverConfig.defaults("task_embeddings"));
+        Retriever projectBriefRetriever = new PgVectorRetriever(
+                dataSource, embedder, PgVectorRetrieverConfig.defaults(PROJECT_BRIEF_TABLE));
         // Gate RAG on the exact same keyword match that activates the
         // "tarefas-similares" skill — one source of truth, and no wasted
         // embedding calls (nor irrelevant context) on unrelated questions.
-        // Wrapped in a CompositeRetriever (even with a single delegate today)
-        // because Aegis4jEngine.Builder only has one .retriever(...) slot —
-        // this is the seam for adding more gated sources later without a
-        // second one silently overwriting this one.
+        // Wrapped in a CompositeRetriever because Aegis4jEngine.Builder only
+        // has one .retriever(...) slot — each gated source tries in order,
+        // first non-empty result wins, so a new source added here never
+        // silently overwrites an existing one.
         Retriever retriever = new CompositeRetriever(List.of(
-                new ConditionalRetriever(pgVectorRetriever, skillRegistry, "tarefas-similares")));
+                new ConditionalRetriever(pgVectorRetriever, skillRegistry, "tarefas-similares"),
+                new ConditionalRetriever(projectBriefRetriever, skillRegistry, "buscar-no-briefing")));
 
         ProviderRegistry providerRegistry = new ProviderRegistry();
         providerRegistry.discover(Thread.currentThread().getContextClassLoader());
@@ -250,6 +263,23 @@ public final class CronosAssistant {
 
     public TaskIndexer taskIndexer() {
         return taskIndexer;
+    }
+
+    /**
+     * Ingests a project's free-text briefing through aegis4j's real
+     * document pipeline (chunk → embed → upsert into
+     * {@value #PROJECT_BRIEF_TABLE}), unlike {@link TaskIndexer}'s
+     * hand-rolled single-row indexing. Using the project id as the
+     * {@code Document} id means re-ingesting the same project's briefing
+     * naturally replaces its old chunks — upsert plus orphan cleanup for
+     * chunks a shrunk re-ingestion no longer produces, both built into
+     * {@code PgVectorIngester}.
+     *
+     * @return the number of chunks written
+     */
+    public int ingestProjectBrief(UUID projectId, String markdown) {
+        Document document = new Document(projectId.toString(), markdown, Map.of());
+        return projectBriefIngester.ingest(List.of(document));
     }
 
     public void close() {
