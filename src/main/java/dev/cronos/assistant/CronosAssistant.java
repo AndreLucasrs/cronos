@@ -18,7 +18,9 @@ import dev.aegis4j.core.provider.ProviderRegistry;
 import dev.aegis4j.core.routing.ModelRouter;
 import dev.aegis4j.core.skill.SkillRegistry;
 import dev.aegis4j.core.usage.InMemoryUsageTracker;
+import dev.aegis4j.guardrails.builtin.JsonSchemaOutputGuard;
 import dev.aegis4j.guardrails.builtin.MaxLengthGuard;
+import dev.aegis4j.guardrails.builtin.PromptInjectionGuard;
 import dev.aegis4j.guardrails.builtin.RegexPiiGuard;
 import dev.aegis4j.guardrails.builtin.grounding.HallucinationGuard;
 import dev.aegis4j.mcp.McpClient;
@@ -79,7 +81,20 @@ public final class CronosAssistant {
     /** Table PgVectorIngester writes project briefing chunks to, and PgVectorRetriever reads them back from. */
     private static final String PROJECT_BRIEF_TABLE = "project_brief_chunks";
 
+    private static final String ESTIMATE_SCHEMA_PROMPT =
+            "{\"minDays\": number, \"maxDays\": number, \"reasoning\": string}";
+
+    private static final Map<String, Object> ESTIMATE_SCHEMA = Map.of(
+            "type", "object",
+            "properties", Map.of(
+                    "minDays", Map.of("type", "number"),
+                    "maxDays", Map.of("type", "number"),
+                    "reasoning", Map.of("type", "string")),
+            "required", List.of("minDays", "maxDays", "reasoning"));
+
     private final Aegis4jEngine engine;
+    private final Aegis4jEngine structuredEngine;
+    private final String structuredModel;
     private final TaskIndexer taskIndexer;
     private final McpClient calendarMcpClient;
     private final McpClient searchMcpClient;
@@ -149,6 +164,7 @@ public final class CronosAssistant {
                 .guardChain(GuardChain.of(
                         MaxLengthGuard.forInput(Env.getInt("CRONOS_MAX_INPUT_CHARS", 4000)),
                         RegexPiiGuard.allPatterns(),
+                        PromptInjectionGuard.defaultPatterns(),
                         buildHallucinationGuard()))
                 .skillRegistry(skillRegistry)
                 .retriever(retriever)
@@ -156,6 +172,21 @@ public final class CronosAssistant {
                 .tools(List.of(reminderTool()), this::executeReminderTool)
                 .usageTracker(usageTracker)
                 .listener(new OtelEngineListener(buildOpenTelemetry()))
+                .build();
+
+        // Dedicated engine for structured-output features: JsonSchemaOutputGuard
+        // always BLOCKs non-conforming output (no WARN mode), so it can't share
+        // the main chat GuardChain above without blocking every free-form reply.
+        // No skills/retrieval/routing needed — provider+model are fixed directly
+        // on each ChatRequest instead.
+        ProviderRegistry structuredProviderRegistry = new ProviderRegistry();
+        structuredProviderRegistry.register(OllamaProvider.create());
+        this.structuredModel = Env.get("CRONOS_ESTIMATE_MODEL", "qwen2.5-coder:7b");
+        this.structuredEngine = Aegis4jEngine.builder()
+                .providerRegistry(structuredProviderRegistry)
+                .guardChain(GuardChain.of(
+                        MaxLengthGuard.forInput(Env.getInt("CRONOS_MAX_INPUT_CHARS", 4000)),
+                        new JsonSchemaOutputGuard(ESTIMATE_SCHEMA)))
                 .build();
     }
 
@@ -273,6 +304,32 @@ public final class CronosAssistant {
         var response = engine.chat(request);
         int totalTokens = response.usage() == null ? 0 : response.usage().totalTokens();
         return new ChatResult(response.content(), response.model(), totalTokens);
+    }
+
+    /**
+     * Structured task-effort estimate via {@link #structuredEngine} —
+     * {@link JsonSchemaOutputGuard} blocks (throws {@link
+     * dev.aegis4j.core.guard.GuardBlockedException}, left to propagate, same
+     * as {@link #chat} does implicitly) whenever the model's reply isn't pure
+     * JSON matching {@link #ESTIMATE_SCHEMA}, so the prompt below explicitly
+     * forbids prose/markdown fences around the JSON.
+     */
+    public String estimateStructured(String taskTitle, String taskDescription) {
+        String description = taskDescription == null ? "" : taskDescription;
+        // "em uma única linha, sem quebras de linha" matters in practice: qwen2.5-coder:7b
+        // otherwise occasionally puts a raw newline inside the "reasoning" string value
+        // (valid-looking pretty-printed JSON to the eye, but not strict JSON), which
+        // JsonSchemaOutputGuard correctly rejects as malformed — see README.
+        String userInput = "Estime o esforço da tarefa \"" + taskTitle + "\" (" + description + "). "
+                + "Responda APENAS com um JSON válido em uma única linha, no formato exato "
+                + ESTIMATE_SCHEMA_PROMPT
+                + ", sem quebras de linha, sem markdown, sem crases, sem nenhum texto antes ou depois.";
+        ChatRequest request = ChatRequest.builder()
+                .userInput(userInput)
+                .providerId(OllamaProvider.ID)
+                .model(structuredModel)
+                .build();
+        return structuredEngine.chat(request).content();
     }
 
     /** Cumulative token usage per provider+model since JVM start, for {@code GET /api/assistant/usage}. */

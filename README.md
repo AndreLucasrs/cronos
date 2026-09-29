@@ -75,7 +75,7 @@ rodando para os testes passarem.
 
 | Pilar do aegis4j | Nesta v0.2 | Onde |
 |---|---|---|
-| **Guardrails** | ✅ | `MaxLengthGuard` bloqueia prompt gigante; `RegexPiiGuard` redige e-mail/telefone/cartão antes do modelo — `CronosAssistant` |
+| **Guardrails** | ✅ | `MaxLengthGuard` bloqueia prompt gigante; `RegexPiiGuard` redige e-mail/telefone/cartão antes do modelo; `PromptInjectionGuard.defaultPatterns()` agora roda em toda a `GuardChain` principal (bilíngue pt/en, só no input) — `CronosAssistant` |
 | **Skills (progressive disclosure)** | ✅ | `skills/estimativa-esforco.md` (heurística sem histórico) + `skills/tarefas-similares.md` (usa o RAG) |
 | **RAG (pgvector)** | ✅ | `OllamaEmbedder` (chama `/api/embed` do Ollama — nenhum módulo do aegis4j ainda publica um `Embedder` concreto) + `PgVectorRetriever` sobre `task_embeddings`, indexada automaticamente quando uma tarefa vira `done` (`TaskIndexer`). Só é consultado quando a pergunta bate com a mesma keyword que ativa a skill `tarefas-similares` (`ConditionalRetriever`) — ver limitações |
 | **RAG (MCP)** | ✅ | Segundo caminho de retrieval, lado a lado com o pgvector via `CompositeRetriever`: `McpToolRetriever` (`aegis4j-rag-mcp`) chama a tool `buscar_tarefas` do servidor companheiro `mcp-search/` (Node, `pg` direto) sobre `HttpSseMcpTransport` — MCP "Streamable HTTP", não stdio. É busca **lexical** (`ILIKE` em título/descrição), deliberadamente diferente da busca semântica do pgvector; gatilhada pela skill `busca-lexical-tarefas` |
@@ -118,6 +118,27 @@ embutidos no `PgVectorIngester`). Retorna `{"chunksIndexed": N}`. A skill
 tabela, adicionado à mesma `CompositeRetriever` que já servia
 `tarefas-similares` — cada fonte de RAG continua isolada por skill, sem uma
 sobrescrever a outra.
+
+### Estimativa estruturada de esforço (v0.3)
+
+`POST /api/tasks/{id}/estimate` pede ao modelo um JSON estrito
+(`{"minDays", "maxDays", "reasoning"}`) para a tarefa indicada, validado por
+`JsonSchemaOutputGuard`. Esse guard **sempre bloqueia** saída que não seja
+JSON válido no schema (não tem modo `WARN`) — colocá-lo na `GuardChain`
+principal do chat bloquearia toda resposta em prosa livre, então ele vive
+num **segundo `Aegis4jEngine`** (`CronosAssistant.structuredEngine`), com
+`ProviderRegistry`/`GuardChain` próprios (só `MaxLengthGuard` +
+`JsonSchemaOutputGuard`) e provider/model fixos direto no `ChatRequest`, sem
+skills/RAG/routing. Testado com `qwen2.5-coder:7b` (bom em seguir formato
+estruturado) — `deepseek-r1:14b` foi descartado de propósito por ser um
+modelo "thinking" que antepõe raciocínio em prosa antes do JSON, quebrando a
+saída pura. Mesmo o `qwen2.5-coder:7b` falhava ocasionalmente (~1 em 3) por
+colocar uma quebra de linha crua dentro do valor de `reasoning` — JSON
+tecnicamente inválido, mas bonito aos olhos; pedir explicitamente "em uma
+única linha, sem quebras de linha" no prompt eliminou o problema nos testes
+manuais (8/8 e depois 5/5 chamadas válidas). Um bloqueio genuíno vira
+`GuardBlockedException` → `422 {"error":"blocked","reasonCode":...}`, igual
+ao chat principal.
 
 ### Limitações honestas, não escondidas
 

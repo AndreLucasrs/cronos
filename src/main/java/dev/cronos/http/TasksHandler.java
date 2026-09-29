@@ -1,6 +1,7 @@
 package dev.cronos.http;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.aegis4j.core.guard.GuardBlockedException;
 import dev.cronos.assistant.CronosAssistant;
 import dev.cronos.config.Env;
 import dev.cronos.domain.Task;
@@ -106,6 +107,28 @@ public final class TasksHandler {
         Files.writeString(icsFile, ics.get());
 
         ctx.json(Map.of("downloadUrl", "/reminders/" + id + ".ics"));
+    }
+
+    /** Structured task-effort estimate via CronosAssistant's dedicated JsonSchemaOutputGuard engine. */
+    public Handler estimate() {
+        return this::handleEstimate;
+    }
+
+    private void handleEstimate(Context ctx) {
+        UUID id = UUID.fromString(ctx.pathParam("id"));
+        Task task = tasks.findById(id);
+        if (task == null) {
+            ctx.status(HttpStatus.NOT_FOUND).json(Map.of("error", "task not found"));
+            return;
+        }
+        try {
+            String json = assistant.estimateStructured(task.title(), task.description());
+            ctx.contentType("application/json").result(json);
+        } catch (GuardBlockedException e) {
+            ctx.status(HttpStatus.UNPROCESSABLE_CONTENT).json(Map.of(
+                    "error", "blocked",
+                    "reasonCode", e.reasonCode()));
+        }
     }
 
     private record CreateTaskRequest(String projectId, String title, String description, String dueDate,
