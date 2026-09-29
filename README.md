@@ -56,7 +56,7 @@ v0.2 o `ModelRouter` decide provider/model em toda mensagem (ver `routing.yaml`)
 | **Skills (progressive disclosure)** | ✅ | `skills/estimativa-esforco.md` (heurística sem histórico) + `skills/tarefas-similares.md` (usa o RAG) |
 | **RAG (pgvector)** | ✅ | `OllamaEmbedder` (chama `/api/embed` do Ollama — nenhum módulo do aegis4j ainda publica um `Embedder` concreto) + `PgVectorRetriever` sobre `task_embeddings`, indexada automaticamente quando uma tarefa vira `done` (`TaskIndexer`). Só é consultado quando a pergunta bate com a mesma keyword que ativa a skill `tarefas-similares` (`ConditionalRetriever`) — ver limitações |
 | **Model routing** | ✅ | `routing.yaml` + `ModelRouter` — pergunta simples cai no `llama3.2:3b`, "estimativa"/"prazo"/"replanejar" cai no `deepseek-r1:14b`. Resposta do chat inclui `model` usado, pra ficar visível qual rota foi tomada. Rotear pra Anthropic/OpenAI de verdade é só trocar `provider`/`model` no YAML e ter a chave configurada |
-| **MCP client** | ✅ | Botão "Criar lembrete" por tarefa → `McpClient` (stdio) chama a tool `criar_lembrete` do servidor companheiro `mcp-calendar/` → gera um `.ics` real, baixável. **Ação determinística (botão), não o modelo decidindo** — o `Aegis4jEngine` v0.2 ainda não tem um loop de tool-calling; e é `.ics` em vez de Google Calendar real pra não depender de credencial OAuth |
+| **MCP client** | ✅ | Dois caminhos lado a lado pra tool `criar_lembrete` do servidor companheiro `mcp-calendar/`: o botão "Criar lembrete" (`POST /api/tasks/{id}/reminder`) segue **determinístico**, chamando `McpClient` (stdio) direto; e agora o assistente também cria lembrete **decidindo sozinho**, via o loop de tool-calling do `Aegis4jEngine` v0.3 (`CronosAssistant.reminderTool`/`executeReminderTool`), roteado por `routing.yaml` pro `OpenAiCompatibleProvider` (`ollama-openai` / `llama3.1:8b` local) — só esse provider manda `tools`/parseia `tool_calls` hoje. Ambos geram `.ics` em vez de Google Calendar real pra não depender de credencial OAuth |
 | **Provider embutido (biblioteca, não sidecar)** | ✅ | `Aegis4jEngine` embutido direto no processo do Javalin |
 
 Desde o bump pra v0.3, o `GuardChain` também tem um `HallucinationGuard` (modo
@@ -154,8 +154,6 @@ dependencies {
 - Ação de escrita real (o MCP hoje só gera `.ics`, não altera nenhum
   calendário de verdade).
 - Integração real com Google Calendar (precisa de OAuth).
-- Tool-calling do modelo decidindo sozinho quando chamar uma tool MCP
-  (gap do próprio `Aegis4jEngine` v0.2).
 
 ## Licença
 

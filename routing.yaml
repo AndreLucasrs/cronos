@@ -1,4 +1,11 @@
 rules:
+  # Checked first: a reminder request often also says "prazo" (the due date)
+  # — e.g. "crie um lembrete ... com prazo 2026-10-05" — and must still win
+  # over the estimativa rule below, since only this route has a tool-capable
+  # provider wired up to actually create the reminder.
+  - match: {keyword: [lembrete, lembrar, agenda]}
+    provider: ollama-openai
+    model: llama3.1:8b
   - match:
       keyword: [quanto tempo, estimativa, estimar, prazo, quantos dias, replanejar, replanejamento]
     provider: ollama
