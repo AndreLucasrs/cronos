@@ -72,6 +72,7 @@ rodando para os testes passarem.
 | **Usage tracking (v0.3)** | ✅ | `InMemoryUsageTracker` plugado no `Aegis4jEngine`. Cada resposta do chat mostra os tokens daquela mensagem na legenda; o acumulado por modelo desde o start da JVM fica em `GET /api/assistant/usage` e no painel "Uso de tokens" ao lado do chat |
 | **MCP client** | ✅ | Dois caminhos lado a lado pra tool `criar_lembrete` do servidor companheiro `mcp-calendar/`: o botão "Criar lembrete" (`POST /api/tasks/{id}/reminder`) segue **determinístico**, chamando `McpClient` (stdio) direto; e agora o assistente também cria lembrete **decidindo sozinho**, via o loop de tool-calling do `Aegis4jEngine` v0.3 (`CronosAssistant.reminderTool`/`executeReminderTool`), roteado por `routing.yaml` pro `OpenAiCompatibleProvider` (`ollama-openai` / `llama3.1:8b` local) — só esse provider manda `tools`/parseia `tool_calls` hoje. Ambos geram `.ics` em vez de Google Calendar real pra não depender de credencial OAuth |
 | **Provider embutido (biblioteca, não sidecar)** | ✅ | `Aegis4jEngine` embutido direto no processo do Javalin |
+| **Observabilidade (EngineListener/OTel)** | ✅ | `OtelEngineListener` (`aegis4j-observability-otel`) plugado via `.listener(...)` no builder — um span `aegis4j.chat` por chamada, com atributos de provider/model/duração/tokens. Pra essa demo os spans só vão pro log (`LoggingSpanExporter`, `SimpleSpanProcessor`); trocar por um backend real (Jaeger, Grafana, etc.) é só trocar o `SpanExporter`, nada mais muda |
 
 Desde o bump pra v0.3, o `GuardChain` também tem um `HallucinationGuard` (modo
 `WARN`) no final — julga se a resposta está de fato apoiada no que o RAG
@@ -169,6 +170,7 @@ dependencies {
     implementation("com.github.AndreLucasrs.aegis4j:aegis4j-rag-jdbc-pgvector:v0.3.1")
     implementation("com.github.AndreLucasrs.aegis4j:aegis4j-routing:v0.3.1")
     implementation("com.github.AndreLucasrs.aegis4j:aegis4j-mcp:v0.3.1")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-observability-otel:v0.3.1")
 }
 ```
 

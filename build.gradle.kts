@@ -25,6 +25,9 @@ dependencies {
     implementation("com.github.AndreLucasrs.aegis4j:aegis4j-rag-jdbc-pgvector:v0.3.1")
     implementation("com.github.AndreLucasrs.aegis4j:aegis4j-routing:v0.3.1")
     implementation("com.github.AndreLucasrs.aegis4j:aegis4j-mcp:v0.3.1")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-observability-otel:v0.3.1")
+    implementation("io.opentelemetry:opentelemetry-sdk:1.66.0")
+    implementation("io.opentelemetry:opentelemetry-exporter-logging:1.66.0")
 
     implementation("io.javalin:javalin:6.3.0")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.1")

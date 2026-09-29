@@ -24,6 +24,7 @@ import dev.aegis4j.guardrails.builtin.grounding.HallucinationGuard;
 import dev.aegis4j.mcp.McpClient;
 import dev.aegis4j.mcp.McpException;
 import dev.aegis4j.mcp.transport.StdioMcpTransport;
+import dev.aegis4j.observability.otel.OtelEngineListener;
 import dev.aegis4j.provider.ollama.OllamaProvider;
 import dev.aegis4j.provider.openai.OpenAiCompatibleProvider;
 import dev.aegis4j.rag.pgvector.PgVectorRetriever;
@@ -35,6 +36,11 @@ import dev.cronos.rag.CompositeRetriever;
 import dev.cronos.rag.ConditionalRetriever;
 import dev.cronos.rag.OllamaEmbedder;
 import dev.cronos.rag.TaskIndexer;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.exporter.logging.LoggingSpanExporter;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.trace.SdkTracerProvider;
+import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
 
 import javax.sql.DataSource;
 import java.io.IOException;
@@ -111,6 +117,25 @@ public final class CronosAssistant {
                 .modelRouter(modelRouter)
                 .tools(List.of(reminderTool()), this::executeReminderTool)
                 .usageTracker(usageTracker)
+                .listener(new OtelEngineListener(buildOpenTelemetry()))
+                .build();
+    }
+
+    /**
+     * Minimal OTel SDK bootstrap for this demo: spans go straight to stdout
+     * via {@link LoggingSpanExporter} — no collector to stand up. Swapping in
+     * a real backend (Jaeger, Grafana, etc.) later is just swapping the
+     * {@code SpanExporter} passed to {@link SimpleSpanProcessor#create}.
+     * {@code SimpleSpanProcessor} (synchronous) over {@code BatchSpanProcessor}
+     * is deliberate here — this is a low-traffic local demo, and exporting a
+     * span right after its request makes it trivial to correlate by hand.
+     */
+    private static OpenTelemetry buildOpenTelemetry() {
+        SdkTracerProvider tracerProvider = SdkTracerProvider.builder()
+                .addSpanProcessor(SimpleSpanProcessor.create(LoggingSpanExporter.create()))
+                .build();
+        return OpenTelemetrySdk.builder()
+                .setTracerProvider(tracerProvider)
                 .build();
     }
 
