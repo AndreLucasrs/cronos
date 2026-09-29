@@ -31,6 +31,13 @@ Abra `http://localhost:7070`. Crie um projeto, adicione tarefas com prazo,
 converse com o assistente na lateral, marque uma tarefa como concluída
 (fica indexada pro RAG), e crie um lembrete `.ics` numa tarefa com prazo.
 
+Opcional: pra ver a rota `aegis4j-sidecar` funcionando (mensagens com
+"sidecar"/"via http"/"modo servidor"), suba também o `aegis4j-server` a
+partir do repo do aegis4j (`AEGIS4J_PROVIDER_ID=ollama ./gradlew
+:aegis4j-server:run`, porta `8686`). O Cronos não inicia esse processo
+sozinho — sem ele rodando, só essas mensagens específicas falham com erro
+de conexão; o resto do app funciona normalmente.
+
 Variáveis de ambiente (todas opcionais, com default de dev local):
 
 | Variável | Default | Uso |
@@ -44,6 +51,7 @@ Variáveis de ambiente (todas opcionais, com default de dev local):
 | `CRONOS_ROUTING_CONFIG` | `routing.yaml` | Regras de model routing |
 | `CRONOS_MCP_CALENDAR_ENTRY` | `mcp-calendar/dist/index.js` | Comando do servidor MCP do calendário |
 | `CRONOS_REMINDERS_DIR` | `reminders` | Onde os `.ics` gerados ficam salvos/servidos |
+| `CRONOS_AEGIS4J_SIDECAR_URL` | `http://localhost:8686/v1` | Endpoint do `aegis4j-server` (sidecar), processo separado — ver rota `aegis4j-sidecar` em `routing.yaml` |
 
 **`CRONOS_PROVIDER_ID`/`CRONOS_OLLAMA_MODEL` não existem mais** — desde a
 v0.2 o `ModelRouter` decide provider/model em toda mensagem (ver `routing.yaml`).
@@ -58,7 +66,7 @@ v0.2 o `ModelRouter` decide provider/model em toda mensagem (ver `routing.yaml`)
 | **Model routing** | ✅ | `routing.yaml` + `ModelRouter` — pergunta simples cai no `llama3.2:3b`, "estimativa"/"prazo"/"replanejar" cai no `deepseek-r1:14b`. Resposta do chat inclui `model` usado, pra ficar visível qual rota foi tomada. Rotear pra Anthropic/OpenAI de verdade é só trocar `provider`/`model` no YAML e ter a chave configurada |
 | **Usage tracking (v0.3)** | ✅ | `InMemoryUsageTracker` plugado no `Aegis4jEngine`. Cada resposta do chat mostra os tokens daquela mensagem na legenda; o acumulado por modelo desde o start da JVM fica em `GET /api/assistant/usage` e no painel "Uso de tokens" ao lado do chat |
 | **MCP client** | ✅ | Dois caminhos lado a lado pra tool `criar_lembrete` do servidor companheiro `mcp-calendar/`: o botão "Criar lembrete" (`POST /api/tasks/{id}/reminder`) segue **determinístico**, chamando `McpClient` (stdio) direto; e agora o assistente também cria lembrete **decidindo sozinho**, via o loop de tool-calling do `Aegis4jEngine` v0.3 (`CronosAssistant.reminderTool`/`executeReminderTool`), roteado por `routing.yaml` pro `OpenAiCompatibleProvider` (`ollama-openai` / `llama3.1:8b` local) — só esse provider manda `tools`/parseia `tool_calls` hoje. Ambos geram `.ics` em vez de Google Calendar real pra não depender de credencial OAuth |
-| **Provider embutido (biblioteca, não sidecar)** | ✅ | `Aegis4jEngine` embutido direto no processo do Javalin |
+| **Dual distribution (embutido + sidecar)** | ✅ | O motor principal continua o `Aegis4jEngine` embutido direto no processo do Javalin — mas mensagens que batem com a rota `sidecar`/`via http`/`modo servidor` de `routing.yaml` são roteadas pro provider `aegis4j-sidecar`, um `OpenAiCompatibleProvider` apontando pra uma instância **separada** do `aegis4j-server` (`CRONOS_AEGIS4J_SIDECAR_URL`, default `http://localhost:8686/v1`) rodando como processo HTTP à parte (repo do aegis4j, não iniciado pelo Cronos) — a mesma engine, nos dois modos de distribuição, interoperando |
 
 Desde o bump pra v0.3, o `GuardChain` também tem um `HallucinationGuard` (modo
 `WARN`) no final — julga se a resposta está de fato apoiada no que o RAG
