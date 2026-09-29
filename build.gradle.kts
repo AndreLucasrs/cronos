@@ -23,6 +23,7 @@ dependencies {
     implementation("com.github.AndreLucasrs.aegis4j:aegis4j-provider-ollama:v0.3.1")
     implementation("com.github.AndreLucasrs.aegis4j:aegis4j-provider-openai:v0.3.1")
     implementation("com.github.AndreLucasrs.aegis4j:aegis4j-rag-jdbc-pgvector:v0.3.1")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-rag-mcp:v0.3.1")
     implementation("com.github.AndreLucasrs.aegis4j:aegis4j-routing:v0.3.1")
     implementation("com.github.AndreLucasrs.aegis4j:aegis4j-mcp:v0.3.1")
 

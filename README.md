@@ -23,6 +23,7 @@ ollama pull nomic-embed-text  # embedding — RAG sobre tarefas concluídas
 docker compose up -d          # Postgres com pgvector
 
 cd mcp-calendar && npm install && npm run build && cd ..   # servidor MCP do calendário
+cd mcp-search && npm install && npm run build && cd ..     # servidor MCP de busca lexical (rodar antes: node mcp-search/dist/index.js &)
 
 ./gradlew run
 ```
@@ -43,6 +44,7 @@ Variáveis de ambiente (todas opcionais, com default de dev local):
 | `CRONOS_EMBED_MODEL` / `CRONOS_EMBED_DIMENSIONS` | `nomic-embed-text` / `768` | Modelo e dimensão do embedding (RAG) |
 | `CRONOS_ROUTING_CONFIG` | `routing.yaml` | Regras de model routing |
 | `CRONOS_MCP_CALENDAR_ENTRY` | `mcp-calendar/dist/index.js` | Comando do servidor MCP do calendário |
+| `CRONOS_MCP_SEARCH_URL` | `http://localhost:3939/mcp` | Endpoint HTTP do servidor MCP de busca lexical (`mcp-search/`) |
 | `CRONOS_REMINDERS_DIR` | `reminders` | Onde os `.ics` gerados ficam salvos/servidos |
 
 **`CRONOS_PROVIDER_ID`/`CRONOS_OLLAMA_MODEL` não existem mais** — desde a
@@ -55,6 +57,7 @@ v0.2 o `ModelRouter` decide provider/model em toda mensagem (ver `routing.yaml`)
 | **Guardrails** | ✅ | `MaxLengthGuard` bloqueia prompt gigante; `RegexPiiGuard` redige e-mail/telefone/cartão antes do modelo — `CronosAssistant` |
 | **Skills (progressive disclosure)** | ✅ | `skills/estimativa-esforco.md` (heurística sem histórico) + `skills/tarefas-similares.md` (usa o RAG) |
 | **RAG (pgvector)** | ✅ | `OllamaEmbedder` (chama `/api/embed` do Ollama — nenhum módulo do aegis4j ainda publica um `Embedder` concreto) + `PgVectorRetriever` sobre `task_embeddings`, indexada automaticamente quando uma tarefa vira `done` (`TaskIndexer`). Só é consultado quando a pergunta bate com a mesma keyword que ativa a skill `tarefas-similares` (`ConditionalRetriever`) — ver limitações |
+| **RAG (MCP)** | ✅ | Segundo caminho de retrieval, lado a lado com o pgvector via `CompositeRetriever`: `McpToolRetriever` (`aegis4j-rag-mcp`) chama a tool `buscar_tarefas` do servidor companheiro `mcp-search/` (Node, `pg` direto) sobre `HttpSseMcpTransport` — MCP "Streamable HTTP", não stdio. É busca **lexical** (`ILIKE` em título/descrição), deliberadamente diferente da busca semântica do pgvector; gatilhada pela skill `busca-lexical-tarefas` |
 | **Model routing** | ✅ | `routing.yaml` + `ModelRouter` — pergunta simples cai no `llama3.2:3b`, "estimativa"/"prazo"/"replanejar" cai no `deepseek-r1:14b`. Resposta do chat inclui `model` usado, pra ficar visível qual rota foi tomada. Rotear pra Anthropic/OpenAI de verdade é só trocar `provider`/`model` no YAML e ter a chave configurada |
 | **Usage tracking (v0.3)** | ✅ | `InMemoryUsageTracker` plugado no `Aegis4jEngine`. Cada resposta do chat mostra os tokens daquela mensagem na legenda; o acumulado por modelo desde o start da JVM fica em `GET /api/assistant/usage` e no painel "Uso de tokens" ao lado do chat |
 | **MCP client** | ✅ | Dois caminhos lado a lado pra tool `criar_lembrete` do servidor companheiro `mcp-calendar/`: o botão "Criar lembrete" (`POST /api/tasks/{id}/reminder`) segue **determinístico**, chamando `McpClient` (stdio) direto; e agora o assistente também cria lembrete **decidindo sozinho**, via o loop de tool-calling do `Aegis4jEngine` v0.3 (`CronosAssistant.reminderTool`/`executeReminderTool`), roteado por `routing.yaml` pro `OpenAiCompatibleProvider` (`ollama-openai` / `llama3.1:8b` local) — só esse provider manda `tools`/parseia `tool_calls` hoje. Ambos geram `.ics` em vez de Google Calendar real pra não depender de credencial OAuth |
