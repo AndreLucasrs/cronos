@@ -59,6 +59,16 @@ v0.2 o `ModelRouter` decide provider/model em toda mensagem (ver `routing.yaml`)
 | **MCP client** | ✅ | Botão "Criar lembrete" por tarefa → `McpClient` (stdio) chama a tool `criar_lembrete` do servidor companheiro `mcp-calendar/` → gera um `.ics` real, baixável. **Ação determinística (botão), não o modelo decidindo** — o `Aegis4jEngine` v0.2 ainda não tem um loop de tool-calling; e é `.ics` em vez de Google Calendar real pra não depender de credencial OAuth |
 | **Provider embutido (biblioteca, não sidecar)** | ✅ | `Aegis4jEngine` embutido direto no processo do Javalin |
 
+### Streaming (v0.3)
+
+`POST /api/assistant/chat/stream` usa `Aegis4jEngine.chatStream` (SSE,
+`data: {"delta":"..."}` por token, `data: [DONE]` no final) — tem um toggle
+"streaming" no chat da UI, **desligado por padrão**. Não é upgrade estrito
+do `/api/assistant/chat`: pelo próprio javadoc do `chatStream` no aegis4j,
+guards de saída (`RegexPiiGuard`), tool-calling e tracking de usage **não
+rodam** nesse caminho — só no `chat()` não-streamado. A UI marca a mensagem
+em streaming visualmente pra deixar essa troca visível, não escondida.
+
 ### Limitações honestas, não escondidas
 
 - O `Retriever` do `Aegis4jEngine` v0.2 em si é **incondicional** — não tem

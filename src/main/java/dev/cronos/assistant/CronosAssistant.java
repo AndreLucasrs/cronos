@@ -8,6 +8,7 @@ import dev.aegis4j.api.routing.RouteTarget;
 import dev.aegis4j.api.routing.RoutingRule;
 import dev.aegis4j.core.engine.Aegis4jEngine;
 import dev.aegis4j.core.engine.ChatRequest;
+import dev.aegis4j.core.engine.StreamedCompletion;
 import dev.aegis4j.core.guard.GuardChain;
 import dev.aegis4j.core.provider.ProviderRegistry;
 import dev.aegis4j.core.routing.ModelRouter;
@@ -108,6 +109,17 @@ public final class CronosAssistant {
                 .build();
         var response = engine.chat(request);
         return new ChatResult(response.content(), response.model());
+    }
+
+    /**
+     * Streamed reply — see {@link Aegis4jEngine#chatStream} javadoc: output
+     * guards, tool-calling and usage tracking do NOT run on this path.
+     */
+    public StreamedCompletion chatStream(String userInput) {
+        ChatRequest request = ChatRequest.builder()
+                .userInput(userInput)
+                .build();
+        return engine.chatStream(request);
     }
 
     /**

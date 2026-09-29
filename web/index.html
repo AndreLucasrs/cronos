@@ -30,6 +30,10 @@
       <div class="chat-log" id="chat-log"></div>
       <form id="chat-form">
         <textarea id="chat-input" placeholder="Escreva sua pergunta..." rows="3" required></textarea>
+        <label class="chat-stream-toggle">
+          <input type="checkbox" id="chat-stream-toggle">
+          streaming (sem guard de saída/tool-calling)
+        </label>
         <button type="submit">Enviar</button>
       </form>
     </aside>

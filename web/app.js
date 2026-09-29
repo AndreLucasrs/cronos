@@ -123,12 +123,65 @@
     var input = document.getElementById("chat-input");
     var message = input.value.trim();
     if (!message) return;
+    var streaming = document.getElementById("chat-stream-toggle").checked;
     appendChat("user", message);
     input.value = "";
-    api("/api/assistant/chat", { method: "POST", body: JSON.stringify({ message: message }) })
-      .then(function (res) { appendChat("assistant", res.reply, res.model); })
-      .catch(function (err) { appendChat("error", err.error === "blocked" ? "Bloqueado pelo guard: " + err.reasonCode : "Erro: " + (err.error || "desconhecido")); });
+    if (streaming) {
+      streamChat(message);
+    } else {
+      api("/api/assistant/chat", { method: "POST", body: JSON.stringify({ message: message }) })
+        .then(function (res) { appendChat("assistant", res.reply, res.model); })
+        .catch(function (err) { appendChat("error", err.error === "blocked" ? "Bloqueado pelo guard: " + err.reasonCode : "Erro: " + (err.error || "desconhecido")); });
+    }
   });
+
+  // Manual SSE parsing over fetch()'s ReadableStream, not EventSource: EventSource
+  // can't send a POST body. Guard/routing failures are reported as a normal JSON
+  // error before any SSE bytes are written (see AssistantChatStreamHandler), so
+  // those still surface through the ordinary error path below.
+  function streamChat(message) {
+    fetch("/api/assistant/chat/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: message })
+    }).then(function (res) {
+      if (!res.ok || (res.headers.get("Content-Type") || "").indexOf("text/event-stream") === -1) {
+        return res.json().then(function (body) { throw body; });
+      }
+      var div = appendChat("assistant streaming", "");
+      var caption = document.createElement("div");
+      caption.className = "chat-model";
+      caption.textContent = "resposta em streaming — sem guard de saída/tool-calling";
+      chatLog.appendChild(caption);
+
+      var reader = res.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = "";
+
+      function pump() {
+        return reader.read().then(function (result) {
+          if (result.done) return;
+          buffer += decoder.decode(result.value, { stream: true });
+          var events = buffer.split("\n\n");
+          buffer = events.pop();
+          events.forEach(function (raw) {
+            if (raw.indexOf("data: ") !== 0) return;
+            var payload = raw.slice(6);
+            if (payload === "[DONE]") return;
+            var parsed = JSON.parse(payload);
+            if (parsed.delta) {
+              div.textContent += parsed.delta;
+              chatLog.scrollTop = chatLog.scrollHeight;
+            }
+          });
+          return pump();
+        });
+      }
+      return pump();
+    }).catch(function (err) {
+      appendChat("error", err.error === "blocked" ? "Bloqueado pelo guard: " + err.reasonCode : "Erro: " + (err.error || "desconhecido"));
+    });
+  }
 
   function appendChat(role, text, model) {
     var div = document.createElement("div");
@@ -142,6 +195,7 @@
       chatLog.appendChild(caption);
     }
     chatLog.scrollTop = chatLog.scrollHeight;
+    return div;
   }
 
   loadProjects();

@@ -7,6 +7,7 @@ import dev.cronos.assistant.CronosAssistant;
 import dev.cronos.config.Env;
 import dev.cronos.db.Database;
 import dev.cronos.http.AssistantChatHandler;
+import dev.cronos.http.AssistantChatStreamHandler;
 import dev.cronos.http.ProjectsHandler;
 import dev.cronos.http.TasksHandler;
 import dev.cronos.repository.ProjectRepository;
@@ -39,6 +40,7 @@ public final class CronosApp {
         ProjectsHandler projectsHandler = new ProjectsHandler(projectRepository, mapper);
         TasksHandler tasksHandler = new TasksHandler(taskRepository, assistant, mapper);
         AssistantChatHandler chatHandler = new AssistantChatHandler(assistant, mapper);
+        AssistantChatStreamHandler chatStreamHandler = new AssistantChatStreamHandler(assistant, mapper);
 
         Javalin app = Javalin.create(config -> {
             config.jsonMapper(new JavalinJackson().updateMapper(om -> {
@@ -65,6 +67,7 @@ public final class CronosApp {
         app.patch("/api/tasks/{id}/status", tasksHandler.updateStatus());
         app.post("/api/tasks/{id}/reminder", tasksHandler.createReminder());
         app.post("/api/assistant/chat", chatHandler.handler());
+        app.post("/api/assistant/chat/stream", chatStreamHandler.handler());
 
         app.start(Env.getInt("CRONOS_PORT", 7070));
     }
