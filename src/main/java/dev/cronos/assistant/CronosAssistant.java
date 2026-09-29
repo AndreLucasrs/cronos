@@ -130,6 +130,14 @@ public final class CronosAssistant {
         // tool-calling turns are routed here instead (see routing.yaml).
         providerRegistry.register(OpenAiCompatibleProvider.custom(
                 "ollama-openai", Env.get("CRONOS_OLLAMA_OPENAI_BASE_URL", "http://localhost:11434/v1"), ""));
+        // Same wire format, remote process: a live aegis4j-server sidecar
+        // (dual distribution — see routing.yaml for the route that uses it).
+        // Wrapped in ToolStrippingProvider: the engine attaches the
+        // reminder tool to every chat() call regardless of route, and
+        // aegis4j-server v0.3.1's request DTO 500s on an unrecognized
+        // "tools" field — see that class's javadoc.
+        providerRegistry.register(new ToolStrippingProvider(OpenAiCompatibleProvider.custom(
+                "aegis4j-sidecar", Env.get("CRONOS_AEGIS4J_SIDECAR_URL", "http://localhost:8686/v1"), "")));
 
         ModelRouter modelRouter = loadModelRouter();
         this.usageTracker = new InMemoryUsageTracker();
