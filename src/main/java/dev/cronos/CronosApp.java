@@ -66,6 +66,7 @@ public final class CronosApp {
         app.post("/api/tasks", tasksHandler.create());
         app.patch("/api/tasks/{id}/status", tasksHandler.updateStatus());
         app.post("/api/tasks/{id}/reminder", tasksHandler.createReminder());
+        app.post("/api/tasks/{id}/estimate", tasksHandler.estimate());
         app.post("/api/assistant/chat", chatHandler.handler());
         app.post("/api/assistant/chat/stream", chatStreamHandler.handler());
         app.get("/api/assistant/usage", ctx -> ctx.json(assistant.usageSummary()));

@@ -52,7 +52,7 @@ v0.2 o `ModelRouter` decide provider/model em toda mensagem (ver `routing.yaml`)
 
 | Pilar do aegis4j | Nesta v0.2 | Onde |
 |---|---|---|
-| **Guardrails** | ✅ | `MaxLengthGuard` bloqueia prompt gigante; `RegexPiiGuard` redige e-mail/telefone/cartão antes do modelo — `CronosAssistant` |
+| **Guardrails** | ✅ | `MaxLengthGuard` bloqueia prompt gigante; `RegexPiiGuard` redige e-mail/telefone/cartão antes do modelo; `PromptInjectionGuard.defaultPatterns()` agora roda em toda a `GuardChain` principal (bilíngue pt/en, só no input) — `CronosAssistant` |
 | **Skills (progressive disclosure)** | ✅ | `skills/estimativa-esforco.md` (heurística sem histórico) + `skills/tarefas-similares.md` (usa o RAG) |
 | **RAG (pgvector)** | ✅ | `OllamaEmbedder` (chama `/api/embed` do Ollama — nenhum módulo do aegis4j ainda publica um `Embedder` concreto) + `PgVectorRetriever` sobre `task_embeddings`, indexada automaticamente quando uma tarefa vira `done` (`TaskIndexer`). Só é consultado quando a pergunta bate com a mesma keyword que ativa a skill `tarefas-similares` (`ConditionalRetriever`) — ver limitações |
 | **Model routing** | ✅ | `routing.yaml` + `ModelRouter` — pergunta simples cai no `llama3.2:3b`, "estimativa"/"prazo"/"replanejar" cai no `deepseek-r1:14b`. Resposta do chat inclui `model` usado, pra ficar visível qual rota foi tomada. Rotear pra Anthropic/OpenAI de verdade é só trocar `provider`/`model` no YAML e ter a chave configurada |
@@ -75,6 +75,27 @@ do `/api/assistant/chat`: pelo próprio javadoc do `chatStream` no aegis4j,
 guards de saída (`RegexPiiGuard`), tool-calling e tracking de usage **não
 rodam** nesse caminho — só no `chat()` não-streamado. A UI marca a mensagem
 em streaming visualmente pra deixar essa troca visível, não escondida.
+
+### Estimativa estruturada de esforço (v0.3)
+
+`POST /api/tasks/{id}/estimate` pede ao modelo um JSON estrito
+(`{"minDays", "maxDays", "reasoning"}`) para a tarefa indicada, validado por
+`JsonSchemaOutputGuard`. Esse guard **sempre bloqueia** saída que não seja
+JSON válido no schema (não tem modo `WARN`) — colocá-lo na `GuardChain`
+principal do chat bloquearia toda resposta em prosa livre, então ele vive
+num **segundo `Aegis4jEngine`** (`CronosAssistant.structuredEngine`), com
+`ProviderRegistry`/`GuardChain` próprios (só `MaxLengthGuard` +
+`JsonSchemaOutputGuard`) e provider/model fixos direto no `ChatRequest`, sem
+skills/RAG/routing. Testado com `qwen2.5-coder:7b` (bom em seguir formato
+estruturado) — `deepseek-r1:14b` foi descartado de propósito por ser um
+modelo "thinking" que antepõe raciocínio em prosa antes do JSON, quebrando a
+saída pura. Mesmo o `qwen2.5-coder:7b` falhava ocasionalmente (~1 em 3) por
+colocar uma quebra de linha crua dentro do valor de `reasoning` — JSON
+tecnicamente inválido, mas bonito aos olhos; pedir explicitamente "em uma
+única linha, sem quebras de linha" no prompt eliminou o problema nos testes
+manuais (8/8 e depois 5/5 chamadas válidas). Um bloqueio genuíno vira
+`GuardBlockedException` → `422 {"error":"blocked","reasonCode":...}`, igual
+ao chat principal.
 
 ### Limitações honestas, não escondidas
 
