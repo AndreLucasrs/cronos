@@ -31,7 +31,10 @@ public final class AssistantChatHandler {
         }
         try {
             CronosAssistant.ChatResult result = assistant.chat(request.message());
-            ctx.json(Map.of("reply", result.reply(), "model", result.model()));
+            ctx.json(Map.of(
+                    "reply", result.reply(),
+                    "model", result.model(),
+                    "totalTokens", result.totalTokens()));
         } catch (GuardBlockedException e) {
             ctx.status(HttpStatus.UNPROCESSABLE_CONTENT).json(Map.of(
                     "error", "blocked",

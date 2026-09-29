@@ -65,6 +65,7 @@ public final class CronosApp {
         app.patch("/api/tasks/{id}/status", tasksHandler.updateStatus());
         app.post("/api/tasks/{id}/reminder", tasksHandler.createReminder());
         app.post("/api/assistant/chat", chatHandler.handler());
+        app.get("/api/assistant/usage", ctx -> ctx.json(assistant.usageSummary()));
 
         app.start(Env.getInt("CRONOS_PORT", 7070));
     }

@@ -56,6 +56,7 @@ v0.2 o `ModelRouter` decide provider/model em toda mensagem (ver `routing.yaml`)
 | **Skills (progressive disclosure)** | ✅ | `skills/estimativa-esforco.md` (heurística sem histórico) + `skills/tarefas-similares.md` (usa o RAG) |
 | **RAG (pgvector)** | ✅ | `OllamaEmbedder` (chama `/api/embed` do Ollama — nenhum módulo do aegis4j ainda publica um `Embedder` concreto) + `PgVectorRetriever` sobre `task_embeddings`, indexada automaticamente quando uma tarefa vira `done` (`TaskIndexer`). Só é consultado quando a pergunta bate com a mesma keyword que ativa a skill `tarefas-similares` (`ConditionalRetriever`) — ver limitações |
 | **Model routing** | ✅ | `routing.yaml` + `ModelRouter` — pergunta simples cai no `llama3.2:3b`, "estimativa"/"prazo"/"replanejar" cai no `deepseek-r1:14b`. Resposta do chat inclui `model` usado, pra ficar visível qual rota foi tomada. Rotear pra Anthropic/OpenAI de verdade é só trocar `provider`/`model` no YAML e ter a chave configurada |
+| **Usage tracking (v0.3)** | ✅ | `InMemoryUsageTracker` plugado no `Aegis4jEngine`. Cada resposta do chat mostra os tokens daquela mensagem na legenda; o acumulado por modelo desde o start da JVM fica em `GET /api/assistant/usage` e no painel "Uso de tokens" ao lado do chat |
 | **MCP client** | ✅ | Botão "Criar lembrete" por tarefa → `McpClient` (stdio) chama a tool `criar_lembrete` do servidor companheiro `mcp-calendar/` → gera um `.ics` real, baixável. **Ação determinística (botão), não o modelo decidindo** — o `Aegis4jEngine` v0.2 ainda não tem um loop de tool-calling; e é `.ics` em vez de Google Calendar real pra não depender de credencial OAuth |
 | **Provider embutido (biblioteca, não sidecar)** | ✅ | `Aegis4jEngine` embutido direto no processo do Javalin |
 
@@ -90,7 +91,7 @@ Ollama manda um campo `thinking` (chain-of-thought) que o `OllamaMessage` do
 aegis4j não esperava. Corrigido e testado no próprio aegis4j
 ([`v0.2.1`](https://github.com/AndreLucasrs/aegis4j/releases/tag/v0.2.1),
 com teste de regressão) — o Cronos consome essa correção desde então (hoje
-na [`v0.2.2`](https://github.com/AndreLucasrs/aegis4j/releases/tag/v0.2.2)).
+na [`v0.3.0`](https://github.com/AndreLucasrs/aegis4j/releases/tag/v0.3.0)).
 
 ## Arquitetura
 
@@ -122,13 +123,14 @@ repositories {
     maven { url = uri("https://jitpack.io") }
 }
 dependencies {
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-core:v0.2.2")
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-guardrails-builtin:v0.2.2")
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-skills:v0.2.2")
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-provider-ollama:v0.2.2")
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-rag-jdbc-pgvector:v0.2.2")
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-routing:v0.2.2")
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-mcp:v0.2.2")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-core:v0.3.0")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-guardrails-builtin:v0.3.0")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-skills:v0.3.0")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-provider-ollama:v0.3.0")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-provider-openai:v0.3.0")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-rag-jdbc-pgvector:v0.3.0")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-routing:v0.3.0")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-mcp:v0.3.0")
 }
 ```
 
