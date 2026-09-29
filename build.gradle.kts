@@ -36,6 +36,7 @@ dependencies {
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
     testImplementation("org.assertj:assertj-core:3.26.3")
+    testImplementation("com.github.AndreLucasrs.aegis4j:aegis4j-testkit:v0.3.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

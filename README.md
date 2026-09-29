@@ -48,6 +48,19 @@ Variáveis de ambiente (todas opcionais, com default de dev local):
 **`CRONOS_PROVIDER_ID`/`CRONOS_OLLAMA_MODEL` não existem mais** — desde a
 v0.2 o `ModelRouter` decide provider/model em toda mensagem (ver `routing.yaml`).
 
+## Build e testes
+
+```bash
+./gradlew test
+```
+
+Primeira suíte automatizada do cronos: `ConditionalRetriever` e
+`CompositeRetriever` (os dois compositores de RAG), o guard chain
+(`MaxLengthGuard`, `RegexPiiGuard`, `HallucinationGuard`) e o `ModelRouter`
+lendo um fixture no formato do `routing.yaml`. Usa o `aegis4j-testkit`
+(`FakeProvider`/`FakeRetriever`) — nada de Ollama, Postgres ou MCP real
+rodando para os testes passarem.
+
 ## O que está aceso (v0.2 — todos os pilares ativos)
 
 | Pilar do aegis4j | Nesta v0.2 | Onde |
