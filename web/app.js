@@ -209,7 +209,8 @@
       }
       rows.forEach(function (row) {
         var li = document.createElement("li");
-        li.textContent = row.model + " — " + row.totalTokens + " tokens (" + row.calls + " chamadas)";
+        li.textContent = row.model + " — " + row.totalTokens + " tokens (" + row.calls + " chamadas)" +
+          (row.estimatedCost ? " — $" + row.estimatedCost.toFixed(4) + " (ilustrativo)" : "");
         usageList.appendChild(li);
       });
     });

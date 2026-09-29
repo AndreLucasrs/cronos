@@ -155,7 +155,13 @@ public final class CronosAssistant {
                 "aegis4j-sidecar", Env.get("CRONOS_AEGIS4J_SIDECAR_URL", "http://localhost:8686/v1"), "")));
 
         ModelRouter modelRouter = loadModelRouter();
-        this.usageTracker = new InMemoryUsageTracker();
+        // Illustrative pricing only — every model Cronos actually talks to is
+        // free/local, so real cost is always $0. Priced here anyway (a fictional
+        // cloud-equivalent rate) purely to demonstrate InMemoryUsageTracker's
+        // estimatedCost(), which is otherwise indistinguishable from "wired but
+        // never actually exercised."
+        this.usageTracker = new InMemoryUsageTracker(Map.of(
+                "llama3.2:3b", new InMemoryUsageTracker.PricingRate(0.0001, 0.0002)));
 
         this.calendarMcpClient = connectCalendarMcp();
 
@@ -341,7 +347,8 @@ public final class CronosAssistant {
                 usage.promptTokens(),
                 usage.completionTokens(),
                 usage.totalTokens(),
-                usageTracker.callCount(key.providerId(), key.model()))));
+                usageTracker.callCount(key.providerId(), key.model()),
+                usageTracker.estimatedCost(key.providerId(), key.model()))));
         return summary;
     }
 
@@ -407,7 +414,9 @@ public final class CronosAssistant {
     public record ChatResult(String reply, String model, int totalTokens) {
     }
 
+    /** {@code estimatedCost} is 0 for any model with no {@link InMemoryUsageTracker.PricingRate} configured — see its construction above. */
     public record UsageSummary(
-            String providerId, String model, int promptTokens, int completionTokens, int totalTokens, long calls) {
+            String providerId, String model, int promptTokens, int completionTokens, int totalTokens, long calls,
+            double estimatedCost) {
     }
 }

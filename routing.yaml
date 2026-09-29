@@ -13,6 +13,11 @@ rules:
   - match: {keyword: [sidecar, via http, modo servidor]}
     provider: aegis4j-sidecar
     model: llama3.2:3b
+  # Declarative RegexRoutingRule (not just keyword): a bug/error report shape
+  # routes to a coding-oriented model instead of the plain default.
+  - match: {regex: "(?i)\\b(exception|stack ?trace|erro:|bug)\\b"}
+    provider: ollama
+    model: qwen2.5-coder:7b
 default:
   provider: ollama
   model: llama3.2:3b
