@@ -99,7 +99,7 @@ Editar uma tarefa depois de concluída deixaria o embedding indexado
 desatualizado — mas o Cronos **não tem endpoint de edição de tarefa**
 (só criar e mudar status), então esse cenário não existe hoje.
 
-### Bug encontrado e corrigido no próprio aegis4j
+### Bugs encontrados e corrigidos no próprio aegis4j
 
 Testando o routing pro `deepseek-r1:14b` (modelo "thinking"), o
 `aegis4j-provider-ollama` quebrava com `UnrecognizedPropertyException` — o
@@ -107,7 +107,16 @@ Ollama manda um campo `thinking` (chain-of-thought) que o `OllamaMessage` do
 aegis4j não esperava. Corrigido e testado no próprio aegis4j
 ([`v0.2.1`](https://github.com/AndreLucasrs/aegis4j/releases/tag/v0.2.1),
 com teste de regressão) — o Cronos consome essa correção desde então (hoje
-na [`v0.3.0`](https://github.com/AndreLucasrs/aegis4j/releases/tag/v0.3.0)).
+na [`v0.3.1`](https://github.com/AndreLucasrs/aegis4j/releases/tag/v0.3.1)).
+
+Testando o usage tracking (acima), o `OllamaProvider.complete()` sempre
+devolvia `Usage.UNKNOWN` — `OllamaChatResponseChunk` nem desserializava os
+campos `prompt_eval_count`/`eval_count` que o próprio Ollama já manda na
+resposta. Corrigido no aegis4j
+([`v0.3.1`](https://github.com/AndreLucasrs/aegis4j/releases/tag/v0.3.1),
+com teste de regressão) — antes do fix, o painel de uso do Cronos mostrava
+`0 tokens` pra qualquer resposta roteada pro Ollama nativo (só o
+`OpenAiCompatibleProvider`, usado no tool-calling, reportava tokens reais).
 
 ## Arquitetura
 
@@ -139,14 +148,14 @@ repositories {
     maven { url = uri("https://jitpack.io") }
 }
 dependencies {
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-core:v0.3.0")
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-guardrails-builtin:v0.3.0")
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-skills:v0.3.0")
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-provider-ollama:v0.3.0")
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-provider-openai:v0.3.0")
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-rag-jdbc-pgvector:v0.3.0")
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-routing:v0.3.0")
-    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-mcp:v0.3.0")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-core:v0.3.1")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-guardrails-builtin:v0.3.1")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-skills:v0.3.1")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-provider-ollama:v0.3.1")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-provider-openai:v0.3.1")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-rag-jdbc-pgvector:v0.3.1")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-routing:v0.3.1")
+    implementation("com.github.AndreLucasrs.aegis4j:aegis4j-mcp:v0.3.1")
 }
 ```
 
