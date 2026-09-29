@@ -23,10 +23,13 @@ import dev.aegis4j.guardrails.builtin.RegexPiiGuard;
 import dev.aegis4j.guardrails.builtin.grounding.HallucinationGuard;
 import dev.aegis4j.mcp.McpClient;
 import dev.aegis4j.mcp.McpException;
+import dev.aegis4j.mcp.transport.HttpSseMcpTransport;
 import dev.aegis4j.mcp.transport.StdioMcpTransport;
 import dev.aegis4j.observability.otel.OtelEngineListener;
 import dev.aegis4j.provider.ollama.OllamaProvider;
 import dev.aegis4j.provider.openai.OpenAiCompatibleProvider;
+import dev.aegis4j.rag.mcp.McpToolArgumentMapper;
+import dev.aegis4j.rag.mcp.McpToolRetriever;
 import dev.aegis4j.rag.pgvector.PgVectorRetriever;
 import dev.aegis4j.rag.pgvector.PgVectorRetrieverConfig;
 import dev.aegis4j.rag.pgvector.ingest.Document;
@@ -48,6 +51,8 @@ import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
 import javax.sql.DataSource;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.URI;
+import java.net.http.HttpClient;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -77,6 +82,7 @@ public final class CronosAssistant {
     private final Aegis4jEngine engine;
     private final TaskIndexer taskIndexer;
     private final McpClient calendarMcpClient;
+    private final McpClient searchMcpClient;
     private final ObjectMapper toolArgsMapper = new ObjectMapper();
     private final InMemoryUsageTracker usageTracker;
     private final PgVectorIngester projectBriefIngester;
@@ -95,6 +101,16 @@ public final class CronosAssistant {
                 dataSource, embedder, PgVectorRetrieverConfig.defaults("task_embeddings"));
         Retriever projectBriefRetriever = new PgVectorRetriever(
                 dataSource, embedder, PgVectorRetrieverConfig.defaults(PROJECT_BRIEF_TABLE));
+
+        this.searchMcpClient = connectSearchMcp();
+        // Third RAG path: lexical (ILIKE) search over tasks via the
+        // mcp-search/ companion server, reached over MCP's "Streamable
+        // HTTP" transport instead of direct JDBC — the engine only ever
+        // sees a Retriever, never knows this one is backed by a remote MCP
+        // call. Its tool already names its params query/top_k, so the
+        // default argument mapper needs no customization.
+        Retriever mcpSearchRetriever = new McpToolRetriever(
+                searchMcpClient, "buscar_tarefas", McpToolArgumentMapper.defaultMapper());
         // Gate RAG on the exact same keyword match that activates the
         // "tarefas-similares" skill — one source of truth, and no wasted
         // embedding calls (nor irrelevant context) on unrelated questions.
@@ -104,7 +120,8 @@ public final class CronosAssistant {
         // silently overwrites an existing one.
         Retriever retriever = new CompositeRetriever(List.of(
                 new ConditionalRetriever(pgVectorRetriever, skillRegistry, "tarefas-similares"),
-                new ConditionalRetriever(projectBriefRetriever, skillRegistry, "buscar-no-briefing")));
+                new ConditionalRetriever(projectBriefRetriever, skillRegistry, "buscar-no-briefing"),
+                new ConditionalRetriever(mcpSearchRetriever, skillRegistry, "busca-lexical-tarefas")));
 
         ProviderRegistry providerRegistry = new ProviderRegistry();
         providerRegistry.discover(Thread.currentThread().getContextClassLoader());
@@ -177,6 +194,16 @@ public final class CronosAssistant {
         List<String> command = List.of(
                 "node", Env.get("CRONOS_MCP_CALENDAR_ENTRY", "mcp-calendar/dist/index.js"));
         StdioMcpTransport transport = new StdioMcpTransport(command, Map.of(), Duration.ofSeconds(30));
+        McpClient client = new McpClient(transport, "cronos", "0.1.0");
+        client.initialize();
+        return client;
+    }
+
+    /** mcp-search/ runs as its own long-lived HTTP process (not a subprocess we own), unlike mcp-calendar's stdio transport. */
+    private McpClient connectSearchMcp() {
+        URI endpoint = URI.create(Env.get("CRONOS_MCP_SEARCH_URL", "http://localhost:3939/mcp"));
+        HttpSseMcpTransport transport = new HttpSseMcpTransport(
+                endpoint, Map.of(), HttpClient.newHttpClient(), Duration.ofSeconds(30));
         McpClient client = new McpClient(transport, "cronos", "0.1.0");
         client.initialize();
         return client;
@@ -309,6 +336,7 @@ public final class CronosAssistant {
 
     public void close() {
         calendarMcpClient.close();
+        searchMcpClient.close();
     }
 
     public record ChatResult(String reply, String model, int totalTokens) {
