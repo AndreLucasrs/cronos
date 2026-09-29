@@ -31,6 +31,7 @@ import dev.aegis4j.rag.pgvector.PgVectorRetrieverConfig;
 import dev.aegis4j.routing.yaml.YamlRoutingRuleLoader;
 import dev.aegis4j.skills.markdown.MarkdownSkillLoader;
 import dev.cronos.config.Env;
+import dev.cronos.rag.CompositeRetriever;
 import dev.cronos.rag.ConditionalRetriever;
 import dev.cronos.rag.OllamaEmbedder;
 import dev.cronos.rag.TaskIndexer;
@@ -79,7 +80,12 @@ public final class CronosAssistant {
         // Gate RAG on the exact same keyword match that activates the
         // "tarefas-similares" skill — one source of truth, and no wasted
         // embedding calls (nor irrelevant context) on unrelated questions.
-        Retriever retriever = new ConditionalRetriever(pgVectorRetriever, skillRegistry, "tarefas-similares");
+        // Wrapped in a CompositeRetriever (even with a single delegate today)
+        // because Aegis4jEngine.Builder only has one .retriever(...) slot —
+        // this is the seam for adding more gated sources later without a
+        // second one silently overwriting this one.
+        Retriever retriever = new CompositeRetriever(List.of(
+                new ConditionalRetriever(pgVectorRetriever, skillRegistry, "tarefas-similares")));
 
         ProviderRegistry providerRegistry = new ProviderRegistry();
         providerRegistry.discover(Thread.currentThread().getContextClassLoader());
