@@ -3,6 +3,7 @@
 
   var projectsEl = document.getElementById("projects");
   var chatLog = document.getElementById("chat-log");
+  var usageList = document.getElementById("usage-list");
 
   function api(path, options) {
     return fetch(path, Object.assign({ headers: { "Content-Type": "application/json" } }, options))
@@ -130,7 +131,7 @@
       streamChat(message);
     } else {
       api("/api/assistant/chat", { method: "POST", body: JSON.stringify({ message: message }) })
-        .then(function (res) { appendChat("assistant", res.reply, res.model); })
+        .then(function (res) { appendChat("assistant", res.reply, res.model, res.totalTokens); loadUsage(); })
         .catch(function (err) { appendChat("error", err.error === "blocked" ? "Bloqueado pelo guard: " + err.reasonCode : "Erro: " + (err.error || "desconhecido")); });
     }
   });
@@ -183,7 +184,7 @@
     });
   }
 
-  function appendChat(role, text, model) {
+  function appendChat(role, text, model, totalTokens) {
     var div = document.createElement("div");
     div.className = "chat-msg " + role;
     div.textContent = text;
@@ -191,12 +192,29 @@
     if (model) {
       var caption = document.createElement("div");
       caption.className = "chat-model";
-      caption.textContent = "respondido por " + model + " (routing)";
+      caption.textContent = "respondido por " + model + " (routing)" +
+        (totalTokens ? " — " + totalTokens + " tokens" : "");
       chatLog.appendChild(caption);
     }
     chatLog.scrollTop = chatLog.scrollHeight;
     return div;
   }
 
+  function loadUsage() {
+    api("/api/assistant/usage").then(function (rows) {
+      usageList.innerHTML = "";
+      if (!rows.length) {
+        usageList.innerHTML = "<li class=\"usage-empty\">Nenhum uso ainda</li>";
+        return;
+      }
+      rows.forEach(function (row) {
+        var li = document.createElement("li");
+        li.textContent = row.model + " — " + row.totalTokens + " tokens (" + row.calls + " chamadas)";
+        usageList.appendChild(li);
+      });
+    });
+  }
+
   loadProjects();
+  loadUsage();
 })();

@@ -17,6 +17,7 @@ import dev.aegis4j.core.guard.GuardChain;
 import dev.aegis4j.core.provider.ProviderRegistry;
 import dev.aegis4j.core.routing.ModelRouter;
 import dev.aegis4j.core.skill.SkillRegistry;
+import dev.aegis4j.core.usage.InMemoryUsageTracker;
 import dev.aegis4j.guardrails.builtin.MaxLengthGuard;
 import dev.aegis4j.guardrails.builtin.RegexPiiGuard;
 import dev.aegis4j.guardrails.builtin.grounding.HallucinationGuard;
@@ -41,6 +42,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -63,6 +65,7 @@ public final class CronosAssistant {
     private final TaskIndexer taskIndexer;
     private final McpClient calendarMcpClient;
     private final ObjectMapper toolArgsMapper = new ObjectMapper();
+    private final InMemoryUsageTracker usageTracker;
 
     public CronosAssistant(DataSource dataSource) {
         Embedder embedder = OllamaEmbedder.fromEnv();
@@ -87,6 +90,7 @@ public final class CronosAssistant {
                 "ollama-openai", Env.get("CRONOS_OLLAMA_OPENAI_BASE_URL", "http://localhost:11434/v1"), ""));
 
         ModelRouter modelRouter = loadModelRouter();
+        this.usageTracker = new InMemoryUsageTracker();
 
         this.calendarMcpClient = connectCalendarMcp();
 
@@ -100,6 +104,7 @@ public final class CronosAssistant {
                 .retriever(retriever)
                 .modelRouter(modelRouter)
                 .tools(List.of(reminderTool()), this::executeReminderTool)
+                .usageTracker(usageTracker)
                 .build();
     }
 
@@ -187,7 +192,21 @@ public final class CronosAssistant {
                 .userInput(userInput)
                 .build();
         var response = engine.chat(request);
-        return new ChatResult(response.content(), response.model());
+        int totalTokens = response.usage() == null ? 0 : response.usage().totalTokens();
+        return new ChatResult(response.content(), response.model(), totalTokens);
+    }
+
+    /** Cumulative token usage per provider+model since JVM start, for {@code GET /api/assistant/usage}. */
+    public List<UsageSummary> usageSummary() {
+        List<UsageSummary> summary = new ArrayList<>();
+        usageTracker.snapshot().forEach((key, usage) -> summary.add(new UsageSummary(
+                key.providerId(),
+                key.model(),
+                usage.promptTokens(),
+                usage.completionTokens(),
+                usage.totalTokens(),
+                usageTracker.callCount(key.providerId(), key.model()))));
+        return summary;
     }
 
     /**
@@ -231,6 +250,10 @@ public final class CronosAssistant {
         calendarMcpClient.close();
     }
 
-    public record ChatResult(String reply, String model) {
+    public record ChatResult(String reply, String model, int totalTokens) {
+    }
+
+    public record UsageSummary(
+            String providerId, String model, int promptTokens, int completionTokens, int totalTokens, long calls) {
     }
 }
